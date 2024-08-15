@@ -36,6 +36,8 @@ let total = 0;
 })();
 
 const evaluateJobsAll = async (page) => {
+  // wait 5 seconds for the page to load
+  await new Promise((resolve, reject) => setTimeout(resolve, 5000));
   // wait for jobs to load
   await page.waitForSelector(`div[class='jobs-search-results-list__subtitle']`);
   // extract the number of jobs loaded
@@ -58,16 +60,16 @@ const evaluateJobsAll = async (page) => {
 }
 
 const evaluateJobsPage = async (page) => {
-  // wait 5 second for the page to load
+  // wait 1 second for the page to load
   await new Promise((resolve, reject) => setTimeout(resolve, 1000));
   // hide the messages sidebar
   try {
     await page.waitForSelector(`aside.msg-overlay-container`);
-      await page.evaluate(() => {
-        const element = document.querySelector('aside.msg-overlay-container');
-        if (element) {
-          element.style.display = 'none';
-        }
+    await page.evaluate(() => {
+      const element = document.querySelector('aside.msg-overlay-container');
+      if (element) {
+        element.style.display = 'none';
+      }
     });
   }
   catch (e) {}
@@ -75,15 +77,15 @@ const evaluateJobsPage = async (page) => {
   await page.waitForSelector(`div[data-view-name='job-card']`)
   // scroll the job list to the bottom, then scroll to top again
   // this forces all job cards to load
-  await scrollDown();
-  await scrollDown();
-  await scrollDown();
-  await scrollDown();
-  await scrollDown();
-  await scrollDown();
-  await scrollDown();
-  await scrollDown();
-  await scrollUp();
+  await scrollDown(page);
+  await scrollDown(page);
+  await scrollDown(page);
+  await scrollDown(page);
+  await scrollDown(page);
+  await scrollDown(page);
+  await scrollDown(page);
+  await scrollDown(page);
+  await scrollUp(page);
   // Iterate over the job cards and click each one
   let jobCardIndex = 0;
   while (true) {
