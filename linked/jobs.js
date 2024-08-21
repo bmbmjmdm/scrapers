@@ -1,4 +1,7 @@
-const puppeteer = require('puppeteer');
+import { OpenAIKey, LinkedUsername, LinkedPassword } from './Secrets.js'
+import { CHAT_FREQUENCY_PENALTY, CHAT_MAX_TOKENS, CHAT_MODEL, CHAT_TEMPERATURE } from './Parameters.js';
+import puppeteer from 'puppeteer';
+
 let total = 0;
 (async () => {
     const browser = await puppeteer.launch({ headless: false });
@@ -6,11 +9,11 @@ let total = 0;
     await page.goto('https://www.linkedin.com/login');
 
     // first, sign in 
-    await typeIntoId(page, 'username', '');
-    await typeIntoId(page, 'password', '');
+    await typeIntoId(page, 'username', LinkedUsername);
+    await typeIntoId(page, 'password', LinkedPassword);
     await clickButtonByAria(page, 'Sign in');
     await page.waitForNavigation();
-    
+  
     // search in Norway first
     await page.goto('https://www.linkedin.com/jobs/search/?currentJobId=3937739385&f_E=3%2C4%2C5%2C6&f_JT=F&f_TPR=r604800&f_WT=2&geoId=103819153&keywords=react%20native&location=Norway&origin=JOB_SEARCH_PAGE_JOB_FILTER&refresh=true&sortBy=R')
     await evaluateJobsAll(page)
@@ -20,6 +23,16 @@ let total = 0;
     await page.goto('https://www.linkedin.com/jobs/search/?currentJobId=3993480027&f_E=3%2C4%2C5%2C6&f_JT=F&f_TPR=r604800&f_WT=2&geoId=106693272&keywords=react%20native&origin=JOB_SEARCH_PAGE_SEARCH_BUTTON&refresh=true&sortBy=R')
     await evaluateJobsAll(page)
     console.log(`Checked ${total} jobs for Switzerland`)
+    total = 0;
+    // Then Netherlands
+    await page.goto('https://www.linkedin.com/jobs/search/?currentJobId=4001670730&f_E=3%2C4%2C5%2C6&f_JT=F&f_TPR=r604800&f_WT=2&geoId=102890719&keywords=react%20native&origin=JOB_SEARCH_PAGE_LOCATION_AUTOCOMPLETE&refresh=true&sortBy=R')
+    await evaluateJobsAll(page)
+    console.log(`Checked ${total} jobs for Netherlands`)
+    total = 0;
+    // Then Austria
+    await page.goto('https://www.linkedin.com/jobs/search/?currentJobId=4006135182&f_E=3%2C4%2C5%2C6&f_JT=F&f_TPR=r604800&f_WT=2&geoId=103883259&keywords=react%20native&origin=JOB_SEARCH_PAGE_LOCATION_AUTOCOMPLETE&refresh=true&sortBy=R')
+    await evaluateJobsAll(page)
+    console.log(`Checked ${total} jobs for Austra`)
     total = 0;
     // Then UK
     await page.goto('https://www.linkedin.com/jobs/search/?currentJobId=3994907945&f_E=3%2C4%2C5%2C6&f_JT=F&f_TPR=r604800&f_WT=2&geoId=101165590&keywords=react%20native&origin=JOB_SEARCH_PAGE_LOCATION_AUTOCOMPLETE&refresh=true&sortBy=R')
@@ -100,23 +113,60 @@ const evaluateJobsPage = async (page) => {
       return elements.map(element => element.textContent.trim());
     }, ...details);
     // now check the job for our desired keywords
-    texts.forEach((text, index) => {
-      const lowercase = text.toLowerCase();
-      for (const keyword of keywords) {
-        if (lowercase.includes(keyword)) {
-          console.log(keyword)
-          const fullUrl = page.url();
-          const removePastAnd = fullUrl.split('&')[0];
-          const job = removePastAnd.replace("search/?currentJobId=", "view/");
-          console.log(job)
-          break;
-        }
+    texts.forEach(async (text, index) => {
+      const fullUrl = page.url();
+      // use gpt-4o-mini to evaluate job description
+      const isEthical = await askAIEthical(text)
+      //if (isEthical.isEthical && isEthical.appropriateExperience && isEthical.isRemote && isEthical.isFullTime) {
+      if (isEthical.isEthical && !isEthical.requiresBackend) {
+        console.log(isEthical.reason)
+        const removePastAnd = fullUrl.split('&')[0];
+        const job = removePastAnd.replace("search/?currentJobId=", "view/");
+        console.log(job)
       }
       total++;
     });
     jobCardIndex++
   }
 }
+
+
+
+const askAIEthical = async (text) => {
+  try {
+    //const question = 'You will recieve a job posting from the user. You need to read it and answer 5 questions. 1. Is this job ethical? Your answer should be true or false. A job is ethical if it benefits the environment (alternative energy, converting existing practices to green ones, etc), animal or human rights (e.g. healthcare, education, social services, etc.), is a non-profit, or similar ethical efforts. 2. What is the reason for your answer to question 1? This should be a single or two word reason (ex: environment, animals, etc). 3. Is this job suitable for a software developer with primarily frontend and ai experience? 4. Is this job fully remote? If you don't know, say true. 5. Is this job full time/permanant position? If you don't know, say true. Your response must be in valid JSON format. Here is an example response: {"isEthical": false, "reason": "business software", "isRemote": true, "isFullTime": true}';
+    const question = 'You will recieve a job posting from the user. You need to read it and answer 3 questions. 1. Is this job ethical? Your answer should be true or false. A job is ethical if it benefits the environment (alternative energy, converting existing practices to green ones, etc), animal or human rights (e.g. healthcare, education, social services, etc.), is a non-profit, political organizing, or similar ethical efforts. Avoid considering jobs that contribute to general societal functioning without a clear ethical focus (e.g., exercise, cryptocurrency, open source software that doesn\'t explicitely support something else ethical, hr/recruiting, student loans, dieting, etc). Here are some that are very obviously unethical: banking, generic business software, military, oil/gas, etc. Additionally do not consider how the employer treats its employees or conducts business internally as a factor when determining whether the job is ethical (for example if an employer promotes DEI in their hiring process, that\'s not ethical work. However if they have a product that promotes DEI in other businesses, that is). 2. What is the reason for your answer to question 1? This should be short (ex: improves vetrinarian software, increases green spending habbits, etc). 3. Does this job REQUIRE backend experience? Note the difference between frontend and backend. Technologies like React and Javascript are frontend, while technolgies like Go, Python, Kafka, Rust, etc are backend. Your response must be in valid JSON format. Here is an example response: {"isEthical": false, "reason": "generic business software", "requiresBackend": true}';
+    const result = await fetch(`https://api.openai.com/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+        Authorization: `Bearer ${OpenAIKey}`
+      },
+      body: JSON.stringify({
+        model: CHAT_MODEL, 
+        messages: [
+          { role: 'system', content: question },
+          { role: 'user', content: text }
+        ],
+        max_tokens: CHAT_MAX_TOKENS,
+        temperature: CHAT_TEMPERATURE,
+        frequency_penalty: CHAT_FREQUENCY_PENALTY
+      })
+    })
+    if (result.status !== 200) throw new Error(`Status ${result.status}`)
+    const json = await result.json()
+    const response = json.choices[0].message.content
+    let sanitized = response.replace(/`/g, '')
+    sanitized = sanitized.replace(/json/g, '')
+    return JSON.parse(sanitized)
+  }
+  catch (e) {
+    console.log(e)
+    return { isEthical: true, reason: 'error', appropriateExperience: true, isRemote: true, isFullTime: true }
+  }
+}
+
 
 const scrollDown = async (page) => {
   await page.evaluate(() => {
@@ -147,305 +197,3 @@ const typeIntoId = async (page, id, text) => {
   // Click the element with the specified ID
   await page.type(`#${id}`, text);
 }
-
-const keywords = [
-  "energy-efficient",
-  "energy efficiency",
-  "circular economy",
-  "ecological",
-  "eco-",
-  "to nature",
-  "from nature",
-  "the nature",
-  "of nature",
-  "with nature",
-  "community health",
-  "integrated care",
-  "telehealth",
-  "health education",
-  "eco-minded",
-  "sustainable living",
-  "sustainable development",
-  "sustainable community",
-  "sustainable lifestyle",
-  "sustainable practices",
-  "sustainable solutions",
-  "sustainable design",
-  "sustainable energy",
-  "eco-conscious", 
-  "eco-friendly",
-  "carbon",
-  "responsible resource",
-  "farming",
-  "green",
-  "eco-friendly",
-  "the environment",
-  "environmental",
-  "climate",
-  "global warming",
-  "climate change",
-  "climate action",
-  "carbon reduction",
-  "emissions",
-  "renewables",
-  "mental health",
-  "mental wellbeing",
-  "cultural wellbeing",
-  "global wellbeing",
-  "societal wellbeing",
-  "society",
-  "wellness",
-  "emotional support",
-  "psychological",
-  "counseling",
-  "therapy",
-  "behavioral health",
-  "animals",
-  "animal welfare",
-  "wildlife",
-  "conservation",
-  "biodiversity",
-  "species protection",
-  "habitat",
-  "endangered species",
-  "grades",
-  "special ed",
-  "autism",
-  "disorder",
-  "education for",
-  "curriculum",
-  "educational",
-  "teaches",
-  "teach them",
-  "student",
-  "child development",
-  "global development",
-  "international aid",
-  "foreign aid",
-  "poverty alleviation",
-  "humanitarian",
-  "relief",
-  "disinformation",
-  "misinformation",
-  "truth",
-  "fact-checking",
-  "media literacy",
-  "fake news",
-  "information integrity",
-  "social work",
-  "outreach",
-  "community building",
-  "community outreach",
-  "local communit",
-  "support communit",
-  "underrepresented",
-  "marginalized",
-  "justice reform",
-  "energy reform",
-  "social safety",
-  "safety net",
-  "inclusive education",
-  "education access",
-  "childhood education",
-  "literacy program",
-  "vulnerable",
-  "underserved",
-  "disadvantaged",
-  "impoverished",
-  "social services",
-  "grassroots",
-  "food",
-  "nutrition",
-  "hunger",
-  "feeding",
-  "food security",
-  "agriculture",
-  "farming",
-  "organic",
-  "shelter",
-  "homelessness",
-  "homeless",
-  "transitional housing",
-  "affordable housing",
-  "+ community",
-  "LGBTQ community",
-  "LGBTQIA community",
-  "youth",
-  "children",
-  "adolescents",
-  "teenagers",
-  "kids",
-  "young people",
-  "queer",
-  "non-binary",
-  "transgender",
-  "non-profit",
-  "NGO",
-  "charity",
-  "volunteer",
-  "human rights",
-  "civil rights",
-  "advocacy",
-  "activism",
-  "renewable energy",
-  "clean energy",
-  "solar",
-  "wind energy",
-  "wind technology",
-  "wind power",
-  "wind turbine",
-  "wind farm",
-  "hydro",
-  "geothermal",
-  "biomass",
-  "energy efficiency",
-  "decarbonization",
-  "clean water",
-  "water access",
-  "sanitation",
-  "hygiene",
-  "water security",
-  "safe water",
-  "accessible food",
-  "food access",
-  "accessible climate",
-  "accessible energy",
-  "accessible healthcare",
-  "accessible education",
-  "accessible housing",
-  "accessible transportation",
-  "accessible psych",
-  "accessible legal",
-  "accessible law",
-  "accessible justice",
-  "wastewater",
-  "water purification",
-  "healthcare access",
-  "access to healthcare",
-  "healthcare equity",
-  "healthcare for",
-  "healthcare services",
-  "healthcare providers",
-  "healthcare professionals",
-  "healthcare workers",
-  "of healthcare",
-  "healthcare system",
-  "healthcare industry",
-  "mecical needs",
-  "medical treatment",
-  "medical services",
-  "medicine",
-  "medical care",
-  "public health",
-  "medical services",
-  "clinics",
-  "hospitals",
-  "ethical",
-  "fair trade",
-  "fair wage",
-  "responsible sourcing",
-  "social responsibility",
-  "CSR",
-  "addict",
-  "recovery",
-  "rehabilitation",
-  "substance abuse",
-  "mental health",
-  "trauma",
-  "PTSD",
-  "counseling",
-  "indigenous",
-  "native rights",
-  "aboriginal",
-  "tribal",
-  "First Nations",
-  "trafficking",
-  "human trafficking",
-  "exploitation",
-  "slavery",
-  "forced labor",
-  "justice",
-  "legal aid",
-  "restorative justice",
-  "criminal justice reform",
-  "low-income housing",
-  "subsidized housing",
-  "malnutrition",
-  "food justice",
-  "legal services",
-  "from the law",
-  "with the law",
-  ", law",
-  "access to law",
-  "educated in law",
-  "disease prevention",
-  "vaccination",
-  "health education",
-  "social justice",
-  "community empowerment",
-  "grassroots org",
-  "grassroots movement",
-  "social equity",
-  "civil rights",
-  "disaster relief",
-  "emergency response",
-  "crisis management",
-  "humanitarian aid",
-  "ethical trade",
-  "fair labor",
-  "gender equality",
-  "women's rights",
-  "gender equity",
-  "empowerment",
-  "gender-based violence",
-  "refugee",
-  "asylum",
-  "immigrant",
-  "immigration",
-  "migrant",
-  "refugee support",
-  "immigrant rights",
-  "preservation",
-  "urban planning",
-  "city planning",
-  "sustainable cities",
-  "green building",
-  "public transportation",
-  "ethical tech",
-  "responsible AI",
-  "data privacy",
-  "cybersecurity",
-  "vocational",
-  "dairy",
-  "meat",
-  "vegan",
-  "vegetarian",
-  "vegetable",
-  "special needs",
-  "affordable education",
-  "education for all",
-  "literacy",
-  "wildlife",
-  "species protection",
-  "ecology",
-  "public policy",
-  "government",
-  "policy reform",
-  "international development",
-  "poverty alleviation",
-  "economic development",
-  "social impact",
-  "clean water",
-  "safe drinking water",
-  "for good",
-  "help people",
-  "help anyone",
-  "help children",
-  "help families",
-  "help animals",
-  "help communities",
-  "help the environment",
-  "help the planet",
-  "help the world",
-  "help society",
-];
