@@ -32,7 +32,7 @@ let total = 0;
     // Then Austria
     await page.goto('https://www.linkedin.com/jobs/search/?currentJobId=4006135182&f_E=3%2C4%2C5%2C6&f_JT=F&f_TPR=r604800&f_WT=2&geoId=103883259&keywords=react%20native&origin=JOB_SEARCH_PAGE_LOCATION_AUTOCOMPLETE&refresh=true&sortBy=R')
     await evaluateJobsAll(page)
-    console.log(`Checked ${total} jobs for Austra`)
+    console.log(`Checked ${total} jobs for Austria`)
     total = 0;
     // Then UK
     await page.goto('https://www.linkedin.com/jobs/search/?currentJobId=3994907945&f_E=3%2C4%2C5%2C6&f_JT=F&f_TPR=r604800&f_WT=2&geoId=101165590&keywords=react%20native&origin=JOB_SEARCH_PAGE_LOCATION_AUTOCOMPLETE&refresh=true&sortBy=R')
@@ -49,15 +49,14 @@ let total = 0;
 })();
 
 const evaluateJobsAll = async (page) => {
-  // wait 5 seconds for the page to load
-  await new Promise((resolve, reject) => setTimeout(resolve, 5000));
-  // wait for jobs to load
-  await page.waitForSelector(`div[class='jobs-search-results-list__subtitle']`);
+  // wait 8 seconds for the page to load
+  await new Promise((resolve, reject) => setTimeout(resolve, 8000));
+  // for some reason using waitForSelector doesnt work for this particular element, and neither does $$. we have to do it manually with querySelectorAll 
   // extract the number of jobs loaded
-  const jobsRaw = await page.$$(`div[class='jobs-search-results-list__subtitle']`);
-  const jobsText = await page.evaluate((...elements) => {
-      return elements.map(element => element.textContent.trim());
-  }, ...jobsRaw);
+  const jobsText = await page.evaluate(async () => {
+    const elements = await document.querySelectorAll("div.jobs-search-results-list__subtitle")
+      return Array.from(elements).map(element => element.textContent.trim());
+  });
   const jobsNum = Number.parseInt(/(\d+)/.exec(jobsText[0])[0])
   // based on the number of jobs, calculate the number of pages (25 jobs per page)
   const pagesNum = Math.ceil(jobsNum / 25);
@@ -134,37 +133,67 @@ const evaluateJobsPage = async (page) => {
 
 const askAIEthical = async (text) => {
   try {
-    //const question = 'You will recieve a job posting from the user. You need to read it and answer 5 questions. 1. Is this job ethical? Your answer should be true or false. A job is ethical if it benefits the environment (alternative energy, converting existing practices to green ones, etc), animal or human rights (e.g. healthcare, education, social services, etc.), is a non-profit, or similar ethical efforts. 2. What is the reason for your answer to question 1? This should be a single or two word reason (ex: environment, animals, etc). 3. Is this job suitable for a software developer with primarily frontend and ai experience? 4. Is this job fully remote? If you don't know, say true. 5. Is this job full time/permanant position? If you don't know, say true. Your response must be in valid JSON format. Here is an example response: {"isEthical": false, "reason": "business software", "isRemote": true, "isFullTime": true}';
-    const question = 'You will recieve a job posting from the user. You need to read it and answer 3 questions. 1. Is this job ethical? Your answer should be true or false. A job is ethical if it does any of the following: benefits the environment (e.g. alternative energy, reducing energy consumption, support conservation, supporting biodiversity, converting existing practices to green ones, etc), benefits animals (e.g. improves animal healthcare, supports adoption, etc), benefits underprivelidged people (e.g. provides goods and services to impoverished communities, provides a meeting space for LGBTQ folk, etc), is a non-profit, supports political organizing, supports education of children, or supports healthcare (not including exercise/diet). Avoid considering jobs that contribute to general societal functioning without a clear ethical focus (e.g., cyber security, open source software, hr/recruiting, cryptocurrency, loans or banking, generic business software, etc). Only consider these if they have a clear connection to one of the ethical fields mentioned previously. Additionally do not consider how the employer treats its employees or conducts business internally as a factor when determining whether the job is ethical (for example if an employer promotes DEI in their hiring process, that\'s not ethical work. However if they have a product that promotes DEI in other businesses, that is). 2. What is the reason for your answer to question 1? This should be short (ex: improves vetrinarian software, increases green spending habbits, etc). 3. Does this job REQUIRE backend experience? Note the difference between frontend and backend. Technologies like React and Javascript are frontend, while technolgies like Go, Python, Kafka, Rust, Ruby, etc are backend. You should only label this true if it is clear that the job REQUIRES backend experience. If it simply mentions it as nice to have, or you are unsure, default to false. Your response must be in valid JSON format. Here is an example response: {"isEthical": false, "reason": "generic business software", "requiresBackend": true}';
-    const result = await fetch(`https://api.openai.com/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        accept: 'application/json',
-        'content-type': 'application/json',
-        Authorization: `Bearer ${OpenAIKey}`
-      },
-      body: JSON.stringify({
-        model: CHAT_MODEL, 
-        messages: [
-          { role: 'system', content: question },
-          { role: 'user', content: text }
-        ],
-        max_tokens: CHAT_MAX_TOKENS,
-        temperature: CHAT_TEMPERATURE,
-        frequency_penalty: CHAT_FREQUENCY_PENALTY
-      })
-    })
+    const messages = []
+    const question = 'You will recieve a job posting from the user. You need to read it and answer 3 questions. 1. Is this job ethical? Your answer should be true or false. A job is ethical if it does any of the following: benefits the environment (e.g. alternative energy, reducing energy consumption, support conservation, supporting biodiversity, converting existing practices to green ones, etc), benefits animals (e.g. improves animal healthcare, supports adoption, etc), benefits underprivelidged people (e.g. provides goods and services to impoverished communities, provides a meeting space for LGBTQ folk, etc), is a non-profit, supports political organizing, supports education of children, or supports healthcare (e.g. therapy, cancer treatment, telehealth, etc). If a job\'s product or service does not explicitely serve one of these buckets, you should answer false. Additionally do not consider how the employer treats its employees or conducts business internally as a factor when determining whether the job is ethical (for example if an employer promotes DEI in their hiring process, that\'s not ethical work. However if they have a product that promotes DEI in other businesses, that is). Lastly, never consider any of these categories ethical: weight-loss, exercise, cryptocurrency, financial literacy, loans. 2. What is the reason for your answer to question 1? This should be short (ex: improves vetrinarian software, increases green spending habbits, etc). 3. Does this job REQUIRE backend experience? Note the difference between frontend and backend. Technologies like React and Javascript are frontend, while technolgies like Go, Python, Kafka, Rust, Ruby, etc are backend. You should only label this true if it is clear that the job REQUIRES backend experience. If it simply mentions it as nice to have, or you are unsure, default to false. Of course any job labeled "fullstack developer" will require backend experience. Your response must be in valid JSON format. Here is an example response: {"isEthical": false, "reason": "generic business software", "requiresBackend": true}';
+    messages.push({ role: 'system', content: question })
+    messages.push({ role: 'user', content: text })
+    const result = await openAiFetch(messages)
     if (result.status !== 200) throw new Error(`Status ${result.status}`)
     const json = await result.json()
     const response = json.choices[0].message.content
     let sanitized = response.replace(/`/g, '')
     sanitized = sanitized.replace(/json/g, '')
-    return JSON.parse(sanitized)
+    const parsedAnswer = JSON.parse(sanitized)
+
+    const nextQuestion = "Refer to the original question, the job description, and your initial answer. Now I want you to scrutinize your own answer and decide if it is accurate. Begin your response with \"Let's think this through step-by-step\".";    
+    messages.push({ role: 'assistant', content: JSON.stringify(parsedAnswer) })
+    messages.push({ role: 'system', content: nextQuestion })
+    const nextResult = await openAiFetch(messages)
+    if (nextResult.status !== 200) throw new Error(`Status ${nextResult.status}`)
+    const nextJson = await nextResult.json()
+    const nextResponse = nextJson.choices[0].message.content
+    
+    const finalQuestion = "Using your scrutiny, update your original JSON answer. Respond with the exact same JSON format as the original question."
+    messages.push({ role: 'assistant', content: nextResponse })
+    messages.push({ role: 'system', content: finalQuestion })
+    const finalResult = await openAiFetch(messages)
+    if (finalResult.status !== 200) throw new Error(`Status ${finalResult.status}`)
+    const finalJson = await finalResult.json()
+    const finalResponse = finalJson.choices[0].message.content
+    let nextSanitized = finalResponse.replace(/`/g, '')
+    nextSanitized = nextSanitized.replace(/json/g, '')
+    const nextParsedAnswer = JSON.parse(nextSanitized)
+    if ((parsedAnswer.isEthical !== nextParsedAnswer.isEthical || parsedAnswer.requiresBackend !== nextParsedAnswer.requiresBackend) && (parsedAnswer.isEthical || nextParsedAnswer.isEthical)) {
+      console.log("===================================")
+      console.log(parsedAnswer)
+      console.log(nextParsedAnswer)
+      console.log(nextResponse)
+      console.log("===================================")
+    }
+    return nextParsedAnswer
   }
   catch (e) {
     console.log(e)
     return { isEthical: true, reason: 'error', appropriateExperience: true, isRemote: true, isFullTime: true }
   }
+}
+
+const openAiFetch = async (messages) => {
+  return await fetch(`https://api.openai.com/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      Authorization: `Bearer ${OpenAIKey}`
+    },
+    body: JSON.stringify({
+      model: CHAT_MODEL, 
+      messages: messages,
+      max_tokens: CHAT_MAX_TOKENS,
+      temperature: CHAT_TEMPERATURE,
+      frequency_penalty: CHAT_FREQUENCY_PENALTY
+    })
+  })
 }
 
 
